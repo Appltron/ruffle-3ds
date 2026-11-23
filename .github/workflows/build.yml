@@ -1,0 +1,48 @@
+name: Build 3DS homebrew
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-o3ds-smoke-test:
+    name: Build native libctru smoke test
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:latest
+      options: --user 1001
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          echo "DEVKITPRO=$DEVKITPRO"
+          echo "DEVKITARM=$DEVKITARM"
+          arm-none-eabi-gcc --version
+
+      - name: Build
+        run: make -j2
+
+      - name: Verify outputs
+        run: |
+          test -s ruffle3ds.3dsx
+          test -s ruffle3ds.elf
+          file ruffle3ds.3dsx ruffle3ds.elf
+
+      - name: Upload homebrew build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruffle3ds-homebrew
+          path: |
+            ruffle3ds.3dsx
+            ruffle3ds.elf
+          if-no-files-found: error
+          retention-days: 14
