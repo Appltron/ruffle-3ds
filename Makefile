@@ -7,6 +7,9 @@ INCLUDES    := include
 
 ARCH        := -march=armv6k -mtune=mpcore -mfloat-abi=hard
 
+# Load devkitPro's standard rules before using CTRULIB.
+include $(DEVKITPRO)/devkitARM/3ds_rules
+
 # Recursive assignment matters: INCLUDE is defined in the outer build branch below.
 CFLAGS      = -g -Wall -Wextra -O2 -mword-relocations -ffunction-sections \
               $(ARCH) $(INCLUDE) -D__3DS__
@@ -15,7 +18,7 @@ ASFLAGS     := -g $(ARCH)
 LDFLAGS     := -specs=3dsx.specs -g $(ARCH)
 
 LIBS        := -lctru
-LIBDIRS     :=
+LIBDIRS     := $(CTRULIB)
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
 # Include devkitARM's standard 3DS build rules.
@@ -35,7 +38,7 @@ export OFILES := $(addsuffix .o,$(BINFILES)) \
                  $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
 export INCLUDE := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
                   $(foreach dir,$(LIBDIRS),-I$(dir)/include) \
-                  -I$(LIBCTRU)/include
+                  
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 
 .PHONY: all
@@ -62,4 +65,3 @@ $(OUTPUT).3dsx: $(OUTPUT).elf
 
 endif
 
-include $(DEVKITPRO)/devkitARM/3ds_rules
