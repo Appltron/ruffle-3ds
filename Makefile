@@ -43,6 +43,7 @@ all: $(BUILD)
 
 $(BUILD):
 	@mkdir -p $@
+	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 .PHONY: clean
 clean:
