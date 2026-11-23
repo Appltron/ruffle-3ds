@@ -7,11 +7,12 @@ INCLUDES    := include
 
 ARCH        := -march=armv6k -mtune=mpcore -mfloat-abi=hard
 
-CFLAGS      := -g -Wall -Wextra -O2 -mword-relocations -ffunction-sections \
-               $(ARCH) $(INCLUDE) -D__3DS__
-CXXFLAGS    := $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++17
+# Recursive assignment matters: INCLUDE is defined in the outer build branch below.
+CFLAGS      = -g -Wall -Wextra -O2 -mword-relocations -ffunction-sections \
+              $(ARCH) $(INCLUDE) -D__3DS__
+CXXFLAGS    = $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++17
 ASFLAGS     := -g $(ARCH)
-LDFLAGS     := -specs=3dsx.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+LDFLAGS     := -specs=3dsx.specs -g $(ARCH)
 
 LIBS        := -lctru
 LIBDIRS     :=
@@ -45,7 +46,7 @@ $(BUILD):
 
 .PHONY: clean
 clean:
-	@$(MAKE) -C $(DEVKITPRO)/devkitARM clean
+	@rm -rf $(BUILD) $(TARGET).elf $(TARGET).3dsx
 
 else
 
