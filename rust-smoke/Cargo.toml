@@ -1,0 +1,11 @@
+[package]
+name = "ruffle3ds-rust-smoke"
+version = "0.1.0"
+edition = "2024"
+description = "Minimal Rust3DS feasibility test for Ruffle3DS"
+
+[dependencies]
+ctru = { package = "ctru-rs", git = "https://github.com/rust3ds/ctru-rs.git" }
+
+[package.metadata.cargo-3ds]
+name = "Ruffle3DS Rust Smoke Test"
