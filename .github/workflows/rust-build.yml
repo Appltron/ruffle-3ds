@@ -23,6 +23,8 @@ jobs:
     container:
       image: devkitpro/devkitarm:latest
       options: --user 0
+    env:
+      HOME: /root
 
     steps:
       - name: Check out source
@@ -35,6 +37,13 @@ jobs:
           clang --version
           ldconfig -p | grep libclang
 
+      - name: Configure devkitARM environment
+        run: |
+          test -n "$DEVKITARM"
+          test -x "$DEVKITARM/bin/arm-none-eabi-gcc"
+          echo "$DEVKITARM/bin" >> "$GITHUB_PATH"
+          echo "Added $DEVKITARM/bin to PATH for subsequent steps"
+
       - name: Install nightly Rust and rust-src
         uses: dtolnay/rust-toolchain@nightly
         with:
@@ -46,6 +55,9 @@ jobs:
           cargo --version
           echo "DEVKITPRO=$DEVKITPRO"
           echo "DEVKITARM=$DEVKITARM"
+          echo "HOME=$HOME"
+          command -v arm-none-eabi-gcc
+          arm-none-eabi-gcc --version
           test -d "$DEVKITPRO/libctru"
           echo "GCC internal include directory:"
           arm-none-eabi-gcc -print-file-name=include
