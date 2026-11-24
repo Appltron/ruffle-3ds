@@ -22,11 +22,18 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: devkitpro/devkitarm:latest
-      options: --user 1001
+      options: --user 0
 
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+
+      - name: Install Clang and libclang
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends clang libclang-dev
+          clang --version
+          ldconfig -p | grep libclang
 
       - name: Install nightly Rust and rust-src
         uses: dtolnay/rust-toolchain@nightly
@@ -40,6 +47,12 @@ jobs:
           echo "DEVKITPRO=$DEVKITPRO"
           echo "DEVKITARM=$DEVKITARM"
           test -d "$DEVKITPRO/libctru"
+          echo "GCC internal include directory:"
+          arm-none-eabi-gcc -print-file-name=include
+          GCC_INCLUDE="$(arm-none-eabi-gcc -print-file-name=include)"
+          test -f "$GCC_INCLUDE/stdbool.h"
+          test -f "$DEVKITARM/arm-none-eabi/include/errno.h"
+          test -f "$DEVKITPRO/libctru/include/3ds.h"
 
       - name: Install cargo-3ds
         run: cargo install --locked cargo-3ds
