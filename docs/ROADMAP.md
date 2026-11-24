@@ -24,10 +24,14 @@
 
 ## Phase 2 — SWF foundation
 
-- [ ] Select a small set of legally distributable SWF test fixtures.
-- [ ] Implement or integrate SWF header/tag parsing.
-- [ ] Display metadata (version, dimensions, frame rate, compression) in the native frontend.
+- [x] Select a tiny in-memory, uncompressed FWS v8 fixture for the initial parser smoke test.
+- [x] Add a separate Rust3DS application that depends on the upstream Ruffle `swf` crate (pinned to source commit `2c6d3c4fe97d5c6f8c447edc2ddafa3b4abb6c66`).
+- [x] Cross-compile the upstream SWF parser dependency and package the test application as a 3DS `.3dsx` and ELF in GitHub Actions.
+- [ ] Run the parser test on actual O3DS hardware and confirm the fixture is parsed successfully at runtime.
+- [ ] Add SD-card SWF loading and display metadata (version, dimensions, frame rate, compression) in the native frontend.
 - [ ] Establish memory and timing instrumentation on O3DS-compatible builds.
+
+**Current evidence:** CI run [45397262744](https://github.com/Appltron/ruffle-3ds/actions/runs/45397262744) succeeded and uploaded `ruffle3ds-swf-parser-homebrew`. This proves the upstream SWF crate and its selected dependency graph can be cross-compiled and linked into a 3DS homebrew application. It does not prove the parser has executed successfully on hardware; the app must still be run on a 3DS to validate runtime behavior.
 
 ## Phase 3 — Runtime and rendering research
 
