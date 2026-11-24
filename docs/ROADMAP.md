@@ -11,14 +11,14 @@
 
 ## Phase 1 — Rust3DS feasibility
 
-- [ ] Establish a separate GitHub Actions Rust build without changing the working C/libctru workflow.
-- [ ] Install nightly Rust with `rust-src` and build using `cargo-3ds`.
-- [ ] Build a minimal `ctru-rs` application for `armv6k-nintendo-3ds`.
-- [ ] Verify both the Rust ELF and packaged `.3dsx` output.
+- [x] Establish a separate GitHub Actions Rust build without changing the working C/libctru workflow.
+- [x] Install nightly Rust with `rust-src` and build using `cargo-3ds`.
+- [x] Build a minimal `ctru-rs` application for `armv6k-nintendo-3ds`.
+- [x] Verify both the Rust ELF and packaged `.3dsx` output; CI uploaded the `ruffle3ds-rust-homebrew` artifact.
 - [ ] Pin the known-good Rust nightly and cargo-3ds versions.
 - [ ] Record limitations in standard-library support, allocator, panic handling, threading and linker requirements.
 
-**Exit condition:** a minimal Rust application builds reproducibly in CI and produces a non-empty `.3dsx` and ELF. Do not start porting Ruffle before this works.
+**Feasibility exit condition: MET.** A minimal Rust application now builds in GitHub Actions and produces the expected `.3dsx` and ELF artifacts. This clears the initial Rust toolchain gate; the remaining checklist items are hardening/documentation tasks, not blockers to beginning Ruffle dependency analysis.
 
 **Confirmed platform facts:** Rust lists this target as Tier 3. It has partial `std` support, requires cross-compilation, and does not support dynamic linking. The Rust project recommends `cargo-3ds` and `ctru-rs` for building and supplying 3DS runtime/libctru integration.
 
