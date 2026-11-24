@@ -1,0 +1,67 @@
+name: Rust3DS feasibility build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "rust-smoke/**"
+      - ".github/workflows/rust-build.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "rust-smoke/**"
+      - ".github/workflows/rust-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-rust-o3ds:
+    name: Build Rust3DS smoke test
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:latest
+      options: --user 1001
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install nightly Rust and rust-src
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Show toolchain
+        run: |
+          rustc --version --verbose
+          cargo --version
+          echo "DEVKITPRO=$DEVKITPRO"
+          echo "DEVKITARM=$DEVKITARM"
+          test -d "$DEVKITPRO/libctru"
+
+      - name: Install cargo-3ds
+        run: cargo install --locked cargo-3ds
+
+      - name: Build Rust homebrew
+        working-directory: rust-smoke
+        run: cargo 3ds build --release --verbose
+
+      - name: Verify Rust outputs
+        working-directory: rust-smoke
+        run: |
+          find target -type f \( -name "*.3dsx" -o -name "*.elf" \) -print
+          test -s target/armv6k-nintendo-3ds/release/ruffle3ds-rust-smoke.3dsx
+          test -s target/armv6k-nintendo-3ds/release/ruffle3ds-rust-smoke.elf
+          ls -lh target/armv6k-nintendo-3ds/release/ruffle3ds-rust-smoke.3dsx target/armv6k-nintendo-3ds/release/ruffle3ds-rust-smoke.elf
+
+      - name: Upload Rust homebrew build
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruffle3ds-rust-homebrew
+          path: |
+            rust-smoke/target/armv6k-nintendo-3ds/release/ruffle3ds-rust-smoke.3dsx
+            rust-smoke/target/armv6k-nintendo-3ds/release/ruffle3ds-rust-smoke.elf
+          if-no-files-found: error
+          retention-days: 14
