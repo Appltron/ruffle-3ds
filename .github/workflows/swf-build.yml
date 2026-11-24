@@ -1,0 +1,86 @@
+name: Ruffle SWF parser feasibility build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "swf-smoke/**"
+      - ".github/workflows/swf-build.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "swf-smoke/**"
+      - ".github/workflows/swf-build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-swf-o3ds:
+    name: Cross-compile upstream SWF parser
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkitarm:latest
+      options: --user 0
+    env:
+      HOME: /root
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Install Clang and libclang
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends clang libclang-dev
+          clang --version
+          ldconfig -p | grep libclang
+
+      - name: Configure devkitARM environment
+        run: |
+          test -n "$DEVKITARM"
+          test -x "$DEVKITARM/bin/arm-none-eabi-gcc"
+          echo "$DEVKITARM/bin" >> "$GITHUB_PATH"
+          echo "Added $DEVKITARM/bin to PATH for subsequent steps"
+
+      - name: Install nightly Rust and rust-src
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rust-src
+
+      - name: Show toolchain
+        run: |
+          rustc --version --verbose
+          cargo --version
+          echo "DEVKITPRO=$DEVKITPRO"
+          echo "DEVKITARM=$DEVKITARM"
+          echo "HOME=$HOME"
+          command -v arm-none-eabi-gcc
+          arm-none-eabi-gcc --version
+          test -f "$DEVKITPRO/libctru/include/3ds.h"
+
+      - name: Install cargo-3ds
+        run: cargo install --locked cargo-3ds
+
+      - name: Build upstream SWF parser test
+        working-directory: swf-smoke
+        run: cargo 3ds build --release --verbose
+
+      - name: Verify SWF parser homebrew outputs
+        working-directory: swf-smoke
+        run: |
+          find target -type f \( -name "*.3dsx" -o -name "*.elf" \) -print
+          test -s target/armv6k-nintendo-3ds/release/ruffle3ds-swf-smoke.3dsx
+          test -s target/armv6k-nintendo-3ds/release/ruffle3ds-swf-smoke.elf
+          ls -lh target/armv6k-nintendo-3ds/release/ruffle3ds-swf-smoke.3dsx target/armv6k-nintendo-3ds/release/ruffle3ds-swf-smoke.elf
+
+      - name: Upload SWF parser homebrew
+        uses: actions/upload-artifact@v4
+        with:
+          name: ruffle3ds-swf-parser-homebrew
+          path: |
+            swf-smoke/target/armv6k-nintendo-3ds/release/ruffle3ds-swf-smoke.3dsx
+            swf-smoke/target/armv6k-nintendo-3ds/release/ruffle3ds-swf-smoke.elf
+          if-no-files-found: error
+          retention-days: 14
