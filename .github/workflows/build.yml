@@ -42,7 +42,7 @@ jobs:
         run: |
           test -s ruffle3ds.3dsx
           test -s ruffle3ds.elf
-          file ruffle3ds.3dsx ruffle3ds.elf
+          ls -lh ruffle3ds.3dsx ruffle3ds.elf
 
       - name: Upload homebrew build
         uses: actions/upload-artifact@v4
