@@ -9,7 +9,7 @@ fn main() {
     let _console = Console::new(gfx.top_screen.borrow_mut());
 
     println!("Ruffle3DS");
-    println!("SD card file-loading test");
+    println!("Real SWF parsing test");
     println!();
     println!("Target: armv6k-nintendo-3ds");
     println!("File: {}", SWF_PATH);
@@ -20,11 +20,32 @@ fn main() {
             println!("File loading: PASS");
             println!("Bytes read: {}", data.len());
 
-            if data.len() >= 3 {
-                let signature = &data[0..3];
-                println!("SWF signature: {}", String::from_utf8_lossy(signature));
-            } else {
-                println!("SWF signature: file is too short");
+            match swf::decompress_swf(&data[..]) {
+                Ok(swf_buffer) => {
+                    println!("SWF decompression: PASS");
+                    println!("SWF version: {}", swf_buffer.header.swf_header().version);
+                    println!("Frame count: {}", swf_buffer.header.num_frames());
+                    println!("Frame rate: {:?}", swf_buffer.header.frame_rate());
+                    println!(
+                        "ActionScript 3: {}",
+                        swf_buffer.header.is_action_script_3()
+                    );
+
+                    match swf::parse_swf(&swf_buffer) {
+                        Ok(movie) => {
+                            println!("SWF parsing: PASS");
+                            println!("Top-level tags: {}", movie.tags.len());
+                        }
+                        Err(error) => {
+                            println!("SWF parsing: FAIL");
+                            println!("{error}");
+                        }
+                    }
+                }
+                Err(error) => {
+                    println!("SWF decompression: FAIL");
+                    println!("{error}");
+                }
             }
         }
         Err(error) => {
