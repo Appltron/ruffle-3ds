@@ -9,7 +9,7 @@ fn main() {
     let _console = Console::new(gfx.top_screen.borrow_mut());
 
     println!("Ruffle3DS");
-    println!("Real SWF parsing test");
+    println!("SWF tag inventory test");
     println!();
     println!("Target: armv6k-nintendo-3ds");
     println!("File: {}", SWF_PATH);
@@ -23,18 +23,70 @@ fn main() {
             match swf::decompress_swf(&data[..]) {
                 Ok(swf_buffer) => {
                     println!("SWF decompression: PASS");
-                    println!("SWF version: {}", swf_buffer.header.swf_header().version);
-                    println!("Frame count: {}", swf_buffer.header.num_frames());
-                    println!("Frame rate: {:?}", swf_buffer.header.frame_rate());
-                    println!(
-                        "ActionScript 3: {}",
-                        swf_buffer.header.is_action_script_3()
-                    );
 
                     match swf::parse_swf(&swf_buffer) {
                         Ok(movie) => {
                             println!("SWF parsing: PASS");
-                            println!("Top-level tags: {}", movie.tags.len());
+                            println!("SWF version: {}", movie.header.version());
+                            println!("Frames: {}", movie.header.num_frames());
+                            println!("Frame rate: {:?}", movie.header.frame_rate());
+                            println!("AS3: {}", movie.header.is_action_script_3());
+                            println!();
+
+                            let mut shapes = 0;
+                            let mut sprites = 0;
+                            let mut placements = 0;
+                            let mut removals = 0;
+                            let mut show_frames = 0;
+                            let mut actions = 0;
+                            let mut bitmaps = 0;
+                            let mut fonts = 0;
+                            let mut text = 0;
+                            let mut buttons = 0;
+                            let mut sounds = 0;
+
+                            for tag in &movie.tags {
+                                match tag {
+                                    swf::Tag::DefineShape(_) => shapes += 1,
+                                    swf::Tag::DefineSprite(_) => sprites += 1,
+                                    swf::Tag::PlaceObject(_) => placements += 1,
+                                    swf::Tag::RemoveObject(_) => removals += 1,
+                                    swf::Tag::ShowFrame => show_frames += 1,
+                                    swf::Tag::DoAction(_) | swf::Tag::DoInitAction { .. } => actions += 1,
+                                    swf::Tag::DefineBits { .. }
+                                    | swf::Tag::DefineBitsJpeg2 { .. }
+                                    | swf::Tag::DefineBitsJpeg3(_)
+                                    | swf::Tag::DefineBitsLossless(_) => bitmaps += 1,
+                                    swf::Tag::DefineFont(_)
+                                    | swf::Tag::DefineFont2(_)
+                                    | swf::Tag::DefineFont4(_)
+                                    | swf::Tag::DefineFontInfo(_) => fonts += 1,
+                                    swf::Tag::DefineText(_) | swf::Tag::DefineText2(_) => text += 1,
+                                    swf::Tag::DefineButton(_) | swf::Tag::DefineButton2(_) => buttons += 1,
+                                    swf::Tag::DefineSound(_)
+                                    | swf::Tag::StartSound(_)
+                                    | swf::Tag::StartSound2 { .. }
+                                    | swf::Tag::SoundStreamHead(_)
+                                    | swf::Tag::SoundStreamHead2(_)
+                                    | swf::Tag::SoundStreamBlock(_) => sounds += 1,
+                                    _ => {}
+                                }
+                            }
+
+                            println!("TOP-LEVEL TAG COUNTS");
+                            println!("Shapes: {}", shapes);
+                            println!("Sprites: {}", sprites);
+                            println!("Placements: {}", placements);
+                            println!("Removals: {}", removals);
+                            println!("ShowFrame: {}", show_frames);
+                            println!("Action blocks: {}", actions);
+                            println!("Bitmaps: {}", bitmaps);
+                            println!("Fonts: {}", fonts);
+                            println!("Text: {}", text);
+                            println!("Buttons: {}", buttons);
+                            println!("Sound tags: {}", sounds);
+                            println!();
+                            println!("Note: counts exclude tags nested inside sprites.");
                         }
                         Err(error) => {
                             println!("SWF parsing: FAIL");
