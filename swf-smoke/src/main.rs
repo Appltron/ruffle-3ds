@@ -262,6 +262,23 @@ fn main() {
                             for (name, count) in common.iter().take(15) {
                                 println!("{}: {}", name, count);
                             }
+
+                            let mut report = String::new();
+                            report.push_str("Ruffle3DS AVM1 Opcode Inventory\\n");
+                            report.push_str("File: raftwars.swf\\n");
+                            report.push_str(&format!("Action blocks scanned: {}\\n", action_blocks));
+                            report.push_str(&format!("Instructions decoded: {}\\n", total_instructions));
+                            report.push_str(&format!("Action parse errors: {}\\n\\n", action_parse_errors));
+                            report.push_str("Opcode,Count\\n");
+
+                            for (name, count) in &opcode_counts {
+                                report.push_str(&format!("{},{}\\n", name, count));
+                            }
+
+                            match std::fs::write("/ruffle3ds/avm1-opcode-report.txt", report) {
+                                Ok(()) => println!("Full opcode report saved: PASS"),
+                                Err(error) => println!("Full opcode report saved: FAIL ({})", error),
+                            }
                         }
                         Err(error) => {
                             println!("SWF parsing: FAIL");
