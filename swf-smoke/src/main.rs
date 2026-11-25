@@ -106,7 +106,7 @@ fn count_tag_actions(
                 for handler in &button.actions {
                     *action_blocks += 1;
                     sources.button_event_handlers += 1;
-                    count_action_bytes(handler.action_data, counts, parse_errors);
+                    count_action_bytes(handler.action_data, counts, parse_errors, strings);
                 }
             }
             swf::Tag::DefineSprite(sprite) => {
