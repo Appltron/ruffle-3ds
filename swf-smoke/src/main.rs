@@ -2,6 +2,58 @@ use ctru::prelude::*;
 
 const SWF_PATH: &str = "/ruffle3ds/raftwars.swf";
 
+#[derive(Default)]
+struct TagCounts {
+    shapes: usize,
+    sprites: usize,
+    placements: usize,
+    removals: usize,
+    show_frames: usize,
+    actions: usize,
+    bitmaps: usize,
+    fonts: usize,
+    text: usize,
+    buttons: usize,
+    sounds: usize,
+    other: usize,
+    total: usize,
+}
+
+fn count_tags(tags: &[swf::Tag<'_>], counts: &mut TagCounts) {
+    for tag in tags {
+        counts.total += 1;
+
+        match tag {
+            swf::Tag::DefineShape(_) => counts.shapes += 1,
+            swf::Tag::DefineSprite(sprite) => {
+                counts.sprites += 1;
+                count_tags(&sprite.tags, counts);
+            }
+            swf::Tag::PlaceObject(_) => counts.placements += 1,
+            swf::Tag::RemoveObject(_) => counts.removals += 1,
+            swf::Tag::ShowFrame => counts.show_frames += 1,
+            swf::Tag::DoAction(_) | swf::Tag::DoInitAction { .. } => counts.actions += 1,
+            swf::Tag::DefineBits { .. }
+            | swf::Tag::DefineBitsJpeg2 { .. }
+            | swf::Tag::DefineBitsJpeg3(_)
+            | swf::Tag::DefineBitsLossless(_) => counts.bitmaps += 1,
+            swf::Tag::DefineFont(_)
+            | swf::Tag::DefineFont2(_)
+            | swf::Tag::DefineFont4(_)
+            | swf::Tag::DefineFontInfo(_) => counts.fonts += 1,
+            swf::Tag::DefineText(_) | swf::Tag::DefineText2(_) => counts.text += 1,
+            swf::Tag::DefineButton(_) | swf::Tag::DefineButton2(_) => counts.buttons += 1,
+            swf::Tag::DefineSound(_)
+            | swf::Tag::StartSound(_)
+            | swf::Tag::StartSound2 { .. }
+            | swf::Tag::SoundStreamHead(_)
+            | swf::Tag::SoundStreamHead2(_)
+            | swf::Tag::SoundStreamBlock(_) => counts.sounds += 1,
+            _ => counts.other += 1,
+        }
+    }
+}
+
 fn main() {
     let gfx = Gfx::new().expect("Could not initialize graphics");
     let mut hid = Hid::new().expect("Could not initialize input");
@@ -87,6 +139,29 @@ fn main() {
                             println!("Sound tags: {}", sounds);
                             println!();
                             println!("Note: counts exclude tags nested inside sprites.");
+
+                            let mut nested = TagCounts::default();
+                            for tag in &movie.tags {
+                                if let swf::Tag::DefineSprite(sprite) = tag {
+                                    count_tags(&sprite.tags, &mut nested);
+                                }
+                            }
+
+                            println!();
+                            println!("NESTED SPRITE TAG COUNTS");
+                            println!("Total nested tags: {}", nested.total);
+                            println!("Shapes: {}", nested.shapes);
+                            println!("Sprites: {}", nested.sprites);
+                            println!("Placements: {}", nested.placements);
+                            println!("Removals: {}", nested.removals);
+                            println!("ShowFrame: {}", nested.show_frames);
+                            println!("Action blocks: {}", nested.actions);
+                            println!("Bitmaps: {}", nested.bitmaps);
+                            println!("Fonts: {}", nested.fonts);
+                            println!("Text: {}", nested.text);
+                            println!("Buttons: {}", nested.buttons);
+                            println!("Sound tags: {}", nested.sounds);
+                            println!("Other tags: {}", nested.other);
                         }
                         Err(error) => {
                             println!("SWF parsing: FAIL");
