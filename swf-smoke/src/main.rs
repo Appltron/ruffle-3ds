@@ -6,6 +6,7 @@ fn count_action_bytes(
     data: &[u8],
     counts: &mut BTreeMap<String, usize>,
     parse_errors: &mut usize,
+    strings: &mut BTreeMap<String, usize>,
 ) {
     let mut reader = swf::avm1::read::Reader::new(data);
 
@@ -22,22 +23,34 @@ fn count_action_bytes(
                 *counts.entry(name).or_insert(0) += 1;
 
                 match action {
+                    swf::avm1::types::Action::Push(values) => {
+                        for value in values {
+                            if let Ok(swf::avm1::types::Value::Str(value)) = value {
+                                *strings.entry(value.to_string()).or_insert(0) += 1;
+                            }
+                        }
+                    }
+                    swf::avm1::types::Action::ConstantPool(pool) => {
+                        for value in pool.strings {
+                            *strings.entry(value.to_string()).or_insert(0) += 1;
+                        }
+                    }
                     swf::avm1::types::Action::DefineFunction(function) => {
-                        count_action_bytes(function.actions, counts, parse_errors);
+                        count_action_bytes(function.actions, counts, parse_errors, strings);
                     }
                     swf::avm1::types::Action::DefineFunction2(function) => {
-                        count_action_bytes(function.actions, counts, parse_errors);
+                        count_action_bytes(function.actions, counts, parse_errors, strings);
                     }
                     swf::avm1::types::Action::With(block) => {
-                        count_action_bytes(block.actions, counts, parse_errors);
+                        count_action_bytes(block.actions, counts, parse_errors, strings);
                     }
                     swf::avm1::types::Action::Try(block) => {
-                        count_action_bytes(block.try_body, counts, parse_errors);
+                        count_action_bytes(block.try_body, counts, parse_errors, strings);
                         if let Some((_, catch_body)) = block.catch_body {
-                            count_action_bytes(catch_body, counts, parse_errors);
+                            count_action_bytes(catch_body, counts, parse_errors, strings);
                         }
                         if let Some(finally_body) = block.finally_body {
-                            count_action_bytes(finally_body, counts, parse_errors);
+                            count_action_bytes(finally_body, counts, parse_errors, strings);
                         }
                     }
                     swf::avm1::types::Action::End => break,
@@ -66,25 +79,26 @@ fn count_tag_actions(
     action_blocks: &mut usize,
     parse_errors: &mut usize,
     sources: &mut ScriptSources,
+    strings: &mut BTreeMap<String, usize>,
 ) {
     for tag in tags {
         match tag {
             swf::Tag::DoAction(actions) => {
                 *action_blocks += 1;
                 sources.timeline_blocks += 1;
-                count_action_bytes(actions, counts, parse_errors);
+                count_action_bytes(actions, counts, parse_errors, strings);
             }
             swf::Tag::DoInitAction { action_data, .. } => {
                 *action_blocks += 1;
                 sources.init_blocks += 1;
-                count_action_bytes(action_data, counts, parse_errors);
+                count_action_bytes(action_data, counts, parse_errors, strings);
             }
             swf::Tag::PlaceObject(place) => {
                 if let Some(clip_actions) = &place.clip_actions {
                     for handler in &clip_actions.records {
                         *action_blocks += 1;
                         sources.clip_event_handlers += 1;
-                        count_action_bytes(handler.action_data, counts, parse_errors);
+                        count_action_bytes(handler.action_data, counts, parse_errors, strings);
                     }
                 }
             }
@@ -102,6 +116,7 @@ fn count_tag_actions(
                     action_blocks,
                     parse_errors,
                     sources,
+                    strings,
                 );
             }
             _ => {}
@@ -276,12 +291,14 @@ fn main() {
                             let mut action_blocks = 0;
                             let mut action_parse_errors = 0;
                             let mut script_sources = ScriptSources::default();
+                            let mut string_counts = BTreeMap::new();
                             count_tag_actions(
                                 &movie.tags,
                                 &mut opcode_counts,
                                 &mut action_blocks,
                                 &mut action_parse_errors,
                                 &mut script_sources,
+                                &mut string_counts,
                             );
 
                             let total_instructions: usize = opcode_counts.values().sum();
@@ -302,6 +319,13 @@ fn main() {
                                 println!("{}: {}", name, count);
                             }
 
+                            let mut strings: Vec<_> = string_counts.iter().collect();
+                            strings.sort_by(|a, b| b.1.cmp(a.1));
+                            println!("Most common script strings:");
+                            for (value, count) in strings.iter().take(30) {
+                                println!("{}: {}", value, count);
+                            }
+
                             let mut report = String::new();
                             report.push_str("Ruffle3DS AVM1 Opcode Inventory\\n");
                             report.push_str("File: raftwars.swf\\n");
@@ -316,6 +340,11 @@ fn main() {
 
                             for (name, count) in &opcode_counts {
                                 report.push_str(&format!("{},{}\\n", name, count));
+                            }
+                            report.push_str("\\nString,Count\\n");
+                            for (value, count) in &string_counts {
+                                let escaped = value.replace('"', "\\"");
+                                report.push_str(&format!("\"{}\",{}\\n", escaped, count));
                             }
 
                             match std::fs::write("/ruffle3ds/avm1-opcode-report.txt", report) {
