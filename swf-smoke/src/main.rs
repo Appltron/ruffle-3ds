@@ -26,13 +26,13 @@ fn count_action_bytes(
                     swf::avm1::types::Action::Push(values) => {
                         for value in values {
                             if let Ok(swf::avm1::types::Value::Str(value)) = value {
-                                *strings.entry(value.to_string()).or_insert(0) += 1;
+                                *strings.entry(value.to_string_lossy(swf::UTF_8)).or_insert(0) += 1;
                             }
                         }
                     }
                     swf::avm1::types::Action::ConstantPool(pool) => {
                         for value in pool.strings {
-                            *strings.entry(value.to_string()).or_insert(0) += 1;
+                            *strings.entry(value.to_string_lossy(swf::UTF_8)).or_insert(0) += 1;
                         }
                     }
                     swf::avm1::types::Action::DefineFunction(function) => {
