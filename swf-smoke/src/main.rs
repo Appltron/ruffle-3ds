@@ -327,24 +327,27 @@ fn main() {
                             }
 
                             let mut report = String::new();
-                            report.push_str("Ruffle3DS AVM1 Opcode Inventory\\n");
-                            report.push_str("File: raftwars.swf\\n");
-                            report.push_str(&format!("Action blocks scanned: {}\\n", action_blocks));
-                            report.push_str(&format!("Instructions decoded: {}\\n", total_instructions));
-                            report.push_str(&format!("Action parse errors: {}\\n\\n", action_parse_errors));
-                            report.push_str(&format!("Timeline blocks: {}\\n", script_sources.timeline_blocks));
-                            report.push_str(&format!("Init blocks: {}\\n", script_sources.init_blocks));
-                            report.push_str(&format!("Clip event handlers: {}\\n", script_sources.clip_event_handlers));
-                            report.push_str(&format!("Button event handlers: {}\\n\\n", script_sources.button_event_handlers));
-                            report.push_str("Opcode,Count\\n");
+                            report.push_str("Ruffle3DS AVM1 Opcode Inventory\n");
+                            report.push_str("File: raftwars.swf\n");
+                            report.push_str(&format!("Action blocks scanned: {}\n", action_blocks));
+                            report.push_str(&format!("Instructions decoded: {}\n", total_instructions));
+                            report.push_str(&format!("Action parse errors: {}\n\n", action_parse_errors));
+                            report.push_str(&format!("Timeline blocks: {}\n", script_sources.timeline_blocks));
+                            report.push_str(&format!("Init blocks: {}\n", script_sources.init_blocks));
+                            report.push_str(&format!("Clip event handlers: {}\n", script_sources.clip_event_handlers));
+                            report.push_str(&format!("Button event handlers: {}\n\n", script_sources.button_event_handlers));
+                            report.push_str("Opcode,Count\n");
 
                             for (name, count) in &opcode_counts {
-                                report.push_str(&format!("{},{}\\n", name, count));
+                                report.push_str(&format!("{},{}\n", name, count));
                             }
-                            report.push_str("\\nString,Count\\n");
+                            report.push_str("\nString\tCount\n");
                             for (value, count) in &string_counts {
-                                let escaped = value.replace('"', "\\"");
-                                report.push_str(&format!("\"{}\",{}\\n", escaped, count));
+                                let sanitized = value
+                                    .replace('\n', " ")
+                                    .replace('\r', " ")
+                                    .replace('\t', " ");
+                                report.push_str(&format!("{}\t{}\n", sanitized, count));
                             }
 
                             match std::fs::write("/ruffle3ds/avm1-opcode-report.txt", report) {
