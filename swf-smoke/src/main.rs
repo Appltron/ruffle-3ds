@@ -52,24 +52,57 @@ fn count_action_bytes(
     }
 }
 
+#[derive(Default)]
+struct ScriptSources {
+    timeline_blocks: usize,
+    init_blocks: usize,
+    clip_event_handlers: usize,
+    button_event_handlers: usize,
+}
+
 fn count_tag_actions(
     tags: &[swf::Tag<'_>],
     counts: &mut BTreeMap<String, usize>,
     action_blocks: &mut usize,
     parse_errors: &mut usize,
+    sources: &mut ScriptSources,
 ) {
     for tag in tags {
         match tag {
             swf::Tag::DoAction(actions) => {
                 *action_blocks += 1;
+                sources.timeline_blocks += 1;
                 count_action_bytes(actions, counts, parse_errors);
             }
             swf::Tag::DoInitAction { action_data, .. } => {
                 *action_blocks += 1;
+                sources.init_blocks += 1;
                 count_action_bytes(action_data, counts, parse_errors);
             }
+            swf::Tag::PlaceObject(place) => {
+                if let Some(clip_actions) = &place.clip_actions {
+                    for handler in &clip_actions.records {
+                        *action_blocks += 1;
+                        sources.clip_event_handlers += 1;
+                        count_action_bytes(handler.action_data, counts, parse_errors);
+                    }
+                }
+            }
+            swf::Tag::DefineButton(button) | swf::Tag::DefineButton2(button) => {
+                for handler in &button.actions {
+                    *action_blocks += 1;
+                    sources.button_event_handlers += 1;
+                    count_action_bytes(handler.action_data, counts, parse_errors);
+                }
+            }
             swf::Tag::DefineSprite(sprite) => {
-                count_tag_actions(&sprite.tags, counts, action_blocks, parse_errors);
+                count_tag_actions(
+                    &sprite.tags,
+                    counts,
+                    action_blocks,
+                    parse_errors,
+                    sources,
+                );
             }
             _ => {}
         }
@@ -242,11 +275,13 @@ fn main() {
                             let mut opcode_counts = BTreeMap::new();
                             let mut action_blocks = 0;
                             let mut action_parse_errors = 0;
+                            let mut script_sources = ScriptSources::default();
                             count_tag_actions(
                                 &movie.tags,
                                 &mut opcode_counts,
                                 &mut action_blocks,
                                 &mut action_parse_errors,
+                                &mut script_sources,
                             );
 
                             let total_instructions: usize = opcode_counts.values().sum();
@@ -255,6 +290,10 @@ fn main() {
                             println!("Action blocks scanned: {}", action_blocks);
                             println!("Instructions decoded: {}", total_instructions);
                             println!("Action parse errors: {}", action_parse_errors);
+                            println!("Timeline blocks: {}", script_sources.timeline_blocks);
+                            println!("Init blocks: {}", script_sources.init_blocks);
+                            println!("Clip event handlers: {}", script_sources.clip_event_handlers);
+                            println!("Button event handlers: {}", script_sources.button_event_handlers);
 
                             let mut common: Vec<_> = opcode_counts.iter().collect();
                             common.sort_by(|a, b| b.1.cmp(a.1));
@@ -269,6 +308,10 @@ fn main() {
                             report.push_str(&format!("Action blocks scanned: {}\\n", action_blocks));
                             report.push_str(&format!("Instructions decoded: {}\\n", total_instructions));
                             report.push_str(&format!("Action parse errors: {}\\n\\n", action_parse_errors));
+                            report.push_str(&format!("Timeline blocks: {}\\n", script_sources.timeline_blocks));
+                            report.push_str(&format!("Init blocks: {}\\n", script_sources.init_blocks));
+                            report.push_str(&format!("Clip event handlers: {}\\n", script_sources.clip_event_handlers));
+                            report.push_str(&format!("Button event handlers: {}\\n\\n", script_sources.button_event_handlers));
                             report.push_str("Opcode,Count\\n");
 
                             for (name, count) in &opcode_counts {
