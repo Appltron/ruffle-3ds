@@ -1,5 +1,81 @@
 use ctru::prelude::*;
 
+use std::collections::BTreeMap;
+
+fn count_action_bytes(
+    data: &[u8],
+    counts: &mut BTreeMap<String, usize>,
+    parse_errors: &mut usize,
+) {
+    let mut reader = swf::avm1::read::Reader::new(data);
+
+    while !reader.get_ref().is_empty() {
+        match reader.read_action() {
+            Ok(action) => {
+                let debug = format!("{:?}", action);
+                let name = debug
+                    .split(|character: char| character == '(' || character.is_whitespace())
+                    .next()
+                    .unwrap_or("Unknown")
+                    .to_string();
+
+                *counts.entry(name).or_insert(0) += 1;
+
+                match action {
+                    swf::avm1::types::Action::DefineFunction(function) => {
+                        count_action_bytes(function.actions, counts, parse_errors);
+                    }
+                    swf::avm1::types::Action::DefineFunction2(function) => {
+                        count_action_bytes(function.actions, counts, parse_errors);
+                    }
+                    swf::avm1::types::Action::With(block) => {
+                        count_action_bytes(block.actions, counts, parse_errors);
+                    }
+                    swf::avm1::types::Action::Try(block) => {
+                        count_action_bytes(block.try_body, counts, parse_errors);
+                        if let Some((_, catch_body)) = block.catch_body {
+                            count_action_bytes(catch_body, counts, parse_errors);
+                        }
+                        if let Some(finally_body) = block.finally_body {
+                            count_action_bytes(finally_body, counts, parse_errors);
+                        }
+                    }
+                    swf::avm1::types::Action::End => break,
+                    _ => {}
+                }
+            }
+            Err(_) => {
+                *parse_errors += 1;
+                break;
+            }
+        }
+    }
+}
+
+fn count_tag_actions(
+    tags: &[swf::Tag<'_>],
+    counts: &mut BTreeMap<String, usize>,
+    action_blocks: &mut usize,
+    parse_errors: &mut usize,
+) {
+    for tag in tags {
+        match tag {
+            swf::Tag::DoAction(actions) => {
+                *action_blocks += 1;
+                count_action_bytes(actions, counts, parse_errors);
+            }
+            swf::Tag::DoInitAction { action_data, .. } => {
+                *action_blocks += 1;
+                count_action_bytes(action_data, counts, parse_errors);
+            }
+            swf::Tag::DefineSprite(sprite) => {
+                count_tag_actions(&sprite.tags, counts, action_blocks, parse_errors);
+            }
+            _ => {}
+        }
+    }
+}
+
 const SWF_PATH: &str = "/ruffle3ds/raftwars.swf";
 
 #[derive(Default)]
@@ -162,6 +238,30 @@ fn main() {
                             println!("Buttons: {}", nested.buttons);
                             println!("Sound tags: {}", nested.sounds);
                             println!("Other tags: {}", nested.other);
+
+                            let mut opcode_counts = BTreeMap::new();
+                            let mut action_blocks = 0;
+                            let mut action_parse_errors = 0;
+                            count_tag_actions(
+                                &movie.tags,
+                                &mut opcode_counts,
+                                &mut action_blocks,
+                                &mut action_parse_errors,
+                            );
+
+                            let total_instructions: usize = opcode_counts.values().sum();
+                            println!();
+                            println!("AVM1 ACTION BYTECODE");
+                            println!("Action blocks scanned: {}", action_blocks);
+                            println!("Instructions decoded: {}", total_instructions);
+                            println!("Action parse errors: {}", action_parse_errors);
+
+                            let mut common: Vec<_> = opcode_counts.iter().collect();
+                            common.sort_by(|a, b| b.1.cmp(a.1));
+                            println!("Most common instructions:");
+                            for (name, count) in common.iter().take(15) {
+                                println!("{}: {}", name, count);
+                            }
                         }
                         Err(error) => {
                             println!("SWF parsing: FAIL");
