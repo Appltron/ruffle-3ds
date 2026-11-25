@@ -6,7 +6,7 @@ description = "Cross-compilation test for Ruffle's SWF parser on Nintendo 3DS"
 
 [dependencies]
 ctru = { package = "ctru-rs", git = "https://github.com/rust3ds/ctru-rs.git" }
-swf = { git = "https://github.com/ruffle-rs/ruffle.git", rev = "2c6d3c4fe97d5c6f8c447edc2ddafa3b4abb6c66", default-features = false }
+swf = { git = "https://github.com/ruffle-rs/ruffle.git", rev = "2c6d3c4fe97d5c6f8c447edc2ddafa3b4abb6c66", default-features = false, features = ["flate2"] }
 
 [package.metadata.cargo-3ds]
 name = "Ruffle3DS SWF Parser Test"
