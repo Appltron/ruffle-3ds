@@ -2,6 +2,51 @@ use ctru::prelude::*;
 
 use std::collections::BTreeMap;
 
+fn is_readable_script_string(value: &str) -> bool {
+    !value.is_empty()
+        && value.chars().all(|character| {
+            character.is_ascii_graphic() || character == ' '
+        })
+}
+
+fn classify_script_string(value: &str) -> &'static str {
+    let lower = value.to_ascii_lowercase();
+
+    if lower.contains("onmouse")
+        || lower.contains("onpress")
+        || lower.contains("onrelease")
+        || lower.contains("onroll")
+        || lower.contains("onenterframe")
+        || lower.contains("onkeypress")
+        || lower.contains("onkeydown")
+        || lower.contains("onkeyup")
+        || lower.contains("onload")
+        || lower.contains("onunload")
+        || lower.contains("ondrag")
+    {
+        "Event handlers"
+    } else if lower.contains("mouse")
+        || lower.contains("key")
+        || lower.contains("stage")
+        || lower.contains("selection")
+    {
+        "Input and display APIs"
+    } else if lower.contains("gotoand")
+        || lower == "play"
+        || lower == "stop"
+        || lower.contains("nextframe")
+        || lower.contains("prevframe")
+        || lower.contains("attachmovie")
+        || lower.contains("duplicatemovieclip")
+        || lower.contains("removemovieclip")
+        || lower.contains("loadmovie")
+    {
+        "Timeline and MovieClip APIs"
+    } else {
+        "Other readable strings"
+    }
+}
+
 fn count_action_bytes(
     data: &[u8],
     counts: &mut BTreeMap<String, usize>,
@@ -319,11 +364,53 @@ fn main() {
                                 println!("{}: {}", name, count);
                             }
 
-                            let mut strings: Vec<_> = string_counts.iter().collect();
-                            strings.sort_by(|a, b| b.1.cmp(a.1));
-                            println!("Most common script strings:");
-                            for (value, count) in strings.iter().take(30) {
-                                println!("{}: {}", value, count);
+                            let mut readable_strings = BTreeMap::new();
+                            for (value, count) in &string_counts {
+                                if is_readable_script_string(value) {
+                                    *readable_strings.entry(value.clone()).or_insert(0usize) += count;
+                                }
+                            }
+
+                            let mut categories: BTreeMap<&str, BTreeMap<String, usize>> = BTreeMap::new();
+                            for (value, count) in &readable_strings {
+                                let category = classify_script_string(value);
+                                *categories
+                                    .entry(category)
+                                    .or_default()
+                                    .entry(value.clone())
+                                    .or_insert(0) += count;
+                            }
+
+                            println!("Readable script strings: {}", readable_strings.len());
+                            for category in ["Event handlers", "Input and display APIs", "Timeline and MovieClip APIs"] {
+                                let entries = categories.get(category);
+                                let count = entries.map_or(0, |items| items.len());
+                                println!("{}: {}", category, count);
+                                if let Some(items) = entries {
+                                    for (value, occurrences) in items.iter().take(8) {
+                                        println!("{} ({})", value, occurrences);
+                                    }
+                                }
+                            }
+
+                            let mut interaction_report = String::new();
+                            interaction_report.push_str("Ruffle3DS Raft Wars Interaction Profile\\n");
+                            interaction_report.push_str(&format!("Readable unique strings: {}\\n", readable_strings.len()));
+                            interaction_report.push_str(&format!("Raw unique strings: {}\\n\\n", string_counts.len()));
+
+                            for category in ["Event handlers", "Input and display APIs", "Timeline and MovieClip APIs", "Other readable strings"] {
+                                interaction_report.push_str(&format!("{}\\n", category));
+                                if let Some(items) = categories.get(category) {
+                                    for (value, count) in items {
+                                        interaction_report.push_str(&format!("{}\\t{}\\n", value, count));
+                                    }
+                                }
+                                interaction_report.push_str("\\n");
+                            }
+
+                            match std::fs::write("/ruffle3ds/interaction-report.txt", interaction_report) {
+                                Ok(()) => println!("Interaction report saved: PASS"),
+                                Err(error) => println!("Interaction report saved: FAIL ({})", error),
                             }
 
                             let mut report = String::new();
