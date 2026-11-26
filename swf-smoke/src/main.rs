@@ -193,18 +193,62 @@ fn trace_action_context(
 ) {
     let mut reader = swf::avm1::read::Reader::new(data);
     let mut instructions: Vec<String> = Vec::new();
+    let mut matches: Vec<(usize, String)> = Vec::new();
     let mut nested: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut constant_pool: Vec<String> = Vec::new();
+
+    let relevant = [
+        "onmousedown", "onmousemove", "onmouseup", "onpress",
+        "onrelease", "onreleaseoutside", "onrollover", "onrollout",
+        "onenterframe", "_xmouse", "_ymouse", "mouselistener",
+        "addlistener", "removelistener", "operatecannon", "calcpower",
+        "calclaunch", "handlecollisions", "checkterraincollisions",
+        "moveraft", "attachmovie", "removemovieclip",
+    ];
 
     while !reader.get_ref().is_empty() {
         match reader.read_action() {
             Ok(action) => {
-                let debug = format!("{:?}", action);
+                let index = instructions.len();
+                let mut description = format!("{:?}", action);
+                let mut pushed_strings = Vec::new();
+
                 match &action {
+                    swf::avm1::types::Action::ConstantPool(pool) => {
+                        constant_pool = pool.strings.iter()
+                            .map(|value| value.to_string_lossy(swf::UTF_8))
+                            .collect();
+                    }
+                    swf::avm1::types::Action::Push(values) => {
+                        for value in values.clone() {
+                            match value {
+                                Ok(swf::avm1::types::Value::Str(value)) => {
+                                    pushed_strings.push(value.to_string_lossy(swf::UTF_8));
+                                }
+                                Ok(swf::avm1::types::Value::ConstantPool(pool_index)) => {
+                                    if let Some(value) = constant_pool.get(pool_index as usize) {
+                                        pushed_strings.push(value.clone());
+                                    } else {
+                                        pushed_strings.push(format!("<constant:{} out of range>", pool_index));
+                                    }
+                                }
+                                Ok(_) => {}
+                                Err(_) => *parse_errors += 1,
+                            }
+                        }
+                        if !pushed_strings.is_empty() {
+                            description.push_str(&format!(" | resolved Push strings: {:?}", pushed_strings));
+                        }
+                    }
                     swf::avm1::types::Action::DefineFunction(function) => {
-                        nested.push((format!("{}/DefineFunction", source), function.actions.to_vec()));
+                        let name = function.name.to_string_lossy(swf::UTF_8);
+                        let label = if name.is_empty() { "<anonymous>" } else { &name };
+                        nested.push((format!("{}/Function({})", source, label), function.actions.to_vec()));
                     }
                     swf::avm1::types::Action::DefineFunction2(function) => {
-                        nested.push((format!("{}/DefineFunction2", source), function.actions.to_vec()));
+                        let name = function.name.to_string_lossy(swf::UTF_8);
+                        let label = if name.is_empty() { "<anonymous>" } else { &name };
+                        nested.push((format!("{}/Function2({})", source, label), function.actions.to_vec()));
                     }
                     swf::avm1::types::Action::With(block) => {
                         nested.push((format!("{}/With", source), block.actions.to_vec()));
@@ -220,7 +264,15 @@ fn trace_action_context(
                     }
                     _ => {}
                 }
-                instructions.push(debug);
+
+                for value in &pushed_strings {
+                    let lower = value.to_ascii_lowercase();
+                    if relevant.iter().any(|term| lower.contains(term)) {
+                        matches.push((index, value.clone()));
+                    }
+                }
+
+                instructions.push(description);
                 if matches!(action, swf::avm1::types::Action::End) {
                     break;
                 }
@@ -232,29 +284,15 @@ fn trace_action_context(
         }
     }
 
-    let relevant = [
-        "onmousedown", "onmousemove", "onmouseup", "onpress",
-        "onrelease", "onreleaseoutside", "onrollover", "onrollout",
-        "onenterframe", "_xmouse", "_ymouse", "mouselistener",
-        "addlistener", "removelistener", "operatecannon", "calcpower",
-        "calclaunch", "handlecollisions", "checkterraincollisions",
-        "moveraft", "attachmovie", "removemovieclip",
-    ];
-
-    for (index, instruction) in instructions.iter().enumerate() {
-        let lower = instruction.to_ascii_lowercase();
-        if lower.starts_with("constantpool")
-            && relevant.iter().any(|term| lower.contains(term))
-        {
-            report.push(format!("SOURCE: {}", source));
-            report.push(format!("MATCH: instruction {} contains relevant ConstantPool data", index));
-            let start = index.saturating_sub(5);
-            let end = (index + 6).min(instructions.len());
-            for context_index in start..end {
-                report.push(format!("  [{}] {}", context_index, instructions[context_index]));
-            }
-            report.push(String::new());
+    for (index, value) in matches {
+        report.push(format!("SOURCE: {}", source));
+        report.push(format!("MATCH: Push instruction {} contains {:?}", index, value));
+        let start = index.saturating_sub(6);
+        let end = (index + 7).min(instructions.len());
+        for context_index in start..end {
+            report.push(format!("  [{}] {}", context_index, instructions[context_index]));
         }
+        report.push(String::new());
     }
 
     for (nested_source, nested_data) in nested {
