@@ -367,7 +367,7 @@ fn main() {
                             let mut readable_strings = BTreeMap::new();
                             for (value, count) in &string_counts {
                                 if is_readable_script_string(value) {
-                                    *readable_strings.entry(value.clone()).or_insert(0usize) += count;
+                                    *readable_strings.entry(value.clone()).or_insert(0usize) += *count;
                                 }
                             }
 
@@ -378,7 +378,7 @@ fn main() {
                                     .entry(category)
                                     .or_default()
                                     .entry(value.clone())
-                                    .or_insert(0) += count;
+                                    .or_insert(0) += *count;
                             }
 
                             println!("Readable script strings: {}", readable_strings.len());
@@ -394,18 +394,18 @@ fn main() {
                             }
 
                             let mut interaction_report = String::new();
-                            interaction_report.push_str("Ruffle3DS Raft Wars Interaction Profile\\n");
-                            interaction_report.push_str(&format!("Readable unique strings: {}\\n", readable_strings.len()));
-                            interaction_report.push_str(&format!("Raw unique strings: {}\\n\\n", string_counts.len()));
+                            interaction_report.push_str("Ruffle3DS Raft Wars Interaction Profile\n");
+                            interaction_report.push_str(&format!("Readable unique strings: {}\n", readable_strings.len()));
+                            interaction_report.push_str(&format!("Raw unique strings: {}\n\n", string_counts.len()));
 
                             for category in ["Event handlers", "Input and display APIs", "Timeline and MovieClip APIs", "Other readable strings"] {
-                                interaction_report.push_str(&format!("{}\\n", category));
+                                interaction_report.push_str(&format!("{}\n", category));
                                 if let Some(items) = categories.get(category) {
                                     for (value, count) in items {
-                                        interaction_report.push_str(&format!("{}\\t{}\\n", value, count));
+                                        interaction_report.push_str(&format!("{}\t{}\n", value, count));
                                     }
                                 }
-                                interaction_report.push_str("\\n");
+                                interaction_report.push_str("\n");
                             }
 
                             match std::fs::write("/ruffle3ds/interaction-report.txt", interaction_report) {
