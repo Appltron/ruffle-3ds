@@ -604,8 +604,9 @@ fn main() {
                                 &mut context_parse_errors,
                             );
                             let mut trace_report = String::from("Ruffle3DS AVM1 Instruction Context Report\n");
-                            trace_report.push_str("This report shows decoded instruction windows around relevant ConstantPool instructions.\n");
-                            trace_report.push_str("It is static analysis, not runtime execution or proof of assignment/call behavior.\n");
+                            trace_report.push_str("This report shows decoded instruction windows around relevant strings actually pushed by AVM1 code.\n");
+                            trace_report.push_str("Constant-pool entries are reported only when referenced by a Push instruction.\n");
+                            trace_report.push_str("This is static analysis, not runtime execution or complete stack/data-flow proof.\n");
                             trace_report.push_str(&format!("Context windows: {}\\n", context_trace.iter().filter(|line| line.starts_with("MATCH:")).count()));
                             trace_report.push_str(&format!("Nested parse errors: {}\\n\\n", context_parse_errors));
                             for line in &context_trace {
