@@ -607,11 +607,11 @@ fn main() {
                             trace_report.push_str("This report shows decoded instruction windows around relevant strings actually pushed by AVM1 code.\n");
                             trace_report.push_str("Constant-pool entries are reported only when referenced by a Push instruction.\n");
                             trace_report.push_str("This is static analysis, not runtime execution or complete stack/data-flow proof.\n");
-                            trace_report.push_str(&format!("Context windows: {}\\n", context_trace.iter().filter(|line| line.starts_with("MATCH:")).count()));
-                            trace_report.push_str(&format!("Nested parse errors: {}\\n\\n", context_parse_errors));
+                                                        trace_report.push_str(&format!("Context windows: {}\n", context_trace.iter().filter(|line| line.starts_with("MATCH:")).count()));
+                                                        trace_report.push_str(&format!("Nested parse errors: {}\n\n", context_parse_errors));
                             for line in &context_trace {
                                 trace_report.push_str(line);
-                                trace_report.push('\\n');
+                                trace_report.push('\n');
                             }
                             match std::fs::write("/ruffle3ds/action-context-report.txt", trace_report) {
                                 Ok(()) => println!("Action context report saved: PASS"),
