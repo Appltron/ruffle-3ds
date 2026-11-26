@@ -52,6 +52,7 @@ fn count_action_bytes(
     counts: &mut BTreeMap<String, usize>,
     parse_errors: &mut usize,
     strings: &mut BTreeMap<String, usize>,
+    trace: &mut Vec<String>,
 ) {
     let mut reader = swf::avm1::read::Reader::new(data);
 
@@ -66,6 +67,18 @@ fn count_action_bytes(
                     .to_string();
 
                 *counts.entry(name).or_insert(0) += 1;
+                let lower_debug = debug.to_ascii_lowercase();
+                let terms = [
+                    "onmousedown", "onmousemove", "onmouseup", "onpress",
+                    "onrelease", "onreleaseoutside", "onrollover", "onrollout",
+                    "onenterframe", "_xmouse", "_ymouse", "gotoandplay",
+                    "gotoandstop", "attachmovie", "removemovieclip",
+                    "calclaunch", "calcpower", "operatecannon",
+                    "handlecollisions", "checkterraincollisions", "moveraft",
+                ];
+                if terms.iter().any(|term| lower_debug.contains(term)) && trace.len() < 5000 {
+                    trace.push(debug.clone());
+                }
 
                 match action {
                     swf::avm1::types::Action::Push(values) => {
@@ -81,21 +94,21 @@ fn count_action_bytes(
                         }
                     }
                     swf::avm1::types::Action::DefineFunction(function) => {
-                        count_action_bytes(function.actions, counts, parse_errors, strings);
+                        count_action_bytes(function.actions, counts, parse_errors, strings, trace);
                     }
                     swf::avm1::types::Action::DefineFunction2(function) => {
-                        count_action_bytes(function.actions, counts, parse_errors, strings);
+                        count_action_bytes(function.actions, counts, parse_errors, strings, trace);
                     }
                     swf::avm1::types::Action::With(block) => {
-                        count_action_bytes(block.actions, counts, parse_errors, strings);
+                        count_action_bytes(block.actions, counts, parse_errors, strings, trace);
                     }
                     swf::avm1::types::Action::Try(block) => {
-                        count_action_bytes(block.try_body, counts, parse_errors, strings);
+                        count_action_bytes(block.try_body, counts, parse_errors, strings, trace);
                         if let Some((_, catch_body)) = block.catch_body {
-                            count_action_bytes(catch_body, counts, parse_errors, strings);
+                            count_action_bytes(catch_body, counts, parse_errors, strings, trace);
                         }
                         if let Some(finally_body) = block.finally_body {
-                            count_action_bytes(finally_body, counts, parse_errors, strings);
+                            count_action_bytes(finally_body, counts, parse_errors, strings, trace);
                         }
                     }
                     swf::avm1::types::Action::End => break,
@@ -125,25 +138,26 @@ fn count_tag_actions(
     parse_errors: &mut usize,
     sources: &mut ScriptSources,
     strings: &mut BTreeMap<String, usize>,
+    trace: &mut Vec<String>,
 ) {
     for tag in tags {
         match tag {
             swf::Tag::DoAction(actions) => {
                 *action_blocks += 1;
                 sources.timeline_blocks += 1;
-                count_action_bytes(actions, counts, parse_errors, strings);
+                count_action_bytes(actions, counts, parse_errors, strings, trace);
             }
             swf::Tag::DoInitAction { action_data, .. } => {
                 *action_blocks += 1;
                 sources.init_blocks += 1;
-                count_action_bytes(action_data, counts, parse_errors, strings);
+                count_action_bytes(action_data, counts, parse_errors, strings, trace);
             }
             swf::Tag::PlaceObject(place) => {
                 if let Some(clip_actions) = &place.clip_actions {
                     for handler in &clip_actions.records {
                         *action_blocks += 1;
                         sources.clip_event_handlers += 1;
-                        count_action_bytes(handler.action_data, counts, parse_errors, strings);
+                        count_action_bytes(handler.action_data, counts, parse_errors, strings, trace);
                     }
                 }
             }
@@ -151,7 +165,7 @@ fn count_tag_actions(
                 for handler in &button.actions {
                     *action_blocks += 1;
                     sources.button_event_handlers += 1;
-                    count_action_bytes(handler.action_data, counts, parse_errors, strings);
+                    count_action_bytes(handler.action_data, counts, parse_errors, strings, trace);
                 }
             }
             swf::Tag::DefineSprite(sprite) => {
@@ -162,6 +176,7 @@ fn count_tag_actions(
                     parse_errors,
                     sources,
                     strings,
+                    trace,
                 );
             }
             _ => {}
@@ -337,6 +352,7 @@ fn main() {
                             let mut action_parse_errors = 0;
                             let mut script_sources = ScriptSources::default();
                             let mut string_counts = BTreeMap::new();
+                            let mut action_trace = Vec::new();
                             count_tag_actions(
                                 &movie.tags,
                                 &mut opcode_counts,
@@ -344,6 +360,7 @@ fn main() {
                                 &mut action_parse_errors,
                                 &mut script_sources,
                                 &mut string_counts,
+                                &mut action_trace,
                             );
 
                             let total_instructions: usize = opcode_counts.values().sum();
@@ -411,6 +428,16 @@ fn main() {
                             match std::fs::write("/ruffle3ds/interaction-report.txt", interaction_report) {
                                 Ok(()) => println!("Interaction report saved: PASS"),
                                 Err(error) => println!("Interaction report saved: FAIL ({})", error),
+                            }
+
+                            let mut trace_report = String::from("Ruffle3DS AVM1 Relevant Action Trace\\n");
+                            trace_report.push_str(&format!("Matching decoded instructions: {}\\n\\n", action_trace.len()));
+                            for line in &action_trace {
+                                trace_report.push_str(&format!("{}\\n", line));
+                            }
+                            match std::fs::write("/ruffle3ds/action-trace.txt", trace_report) {
+                                Ok(()) => println!("Action trace saved: PASS"),
+                                Err(error) => println!("Action trace saved: FAIL ({})", error),
                             }
 
                             let mut report = String::new();
