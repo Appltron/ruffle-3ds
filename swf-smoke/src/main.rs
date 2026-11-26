@@ -184,6 +184,133 @@ fn count_tag_actions(
     }
 }
 
+
+fn trace_action_context(
+    data: &[u8],
+    source: &str,
+    report: &mut Vec<String>,
+    parse_errors: &mut usize,
+) {
+    let mut reader = swf::avm1::read::Reader::new(data);
+    let mut instructions: Vec<String> = Vec::new();
+    let mut nested: Vec<(String, Vec<u8>)> = Vec::new();
+
+    while !reader.get_ref().is_empty() {
+        match reader.read_action() {
+            Ok(action) => {
+                let debug = format!("{:?}", action);
+                match &action {
+                    swf::avm1::types::Action::DefineFunction(function) => {
+                        nested.push((format!("{}/DefineFunction", source), function.actions.to_vec()));
+                    }
+                    swf::avm1::types::Action::DefineFunction2(function) => {
+                        nested.push((format!("{}/DefineFunction2", source), function.actions.to_vec()));
+                    }
+                    swf::avm1::types::Action::With(block) => {
+                        nested.push((format!("{}/With", source), block.actions.to_vec()));
+                    }
+                    swf::avm1::types::Action::Try(block) => {
+                        nested.push((format!("{}/Try", source), block.try_body.to_vec()));
+                        if let Some((_, catch_body)) = &block.catch_body {
+                            nested.push((format!("{}/Catch", source), catch_body.to_vec()));
+                        }
+                        if let Some(finally_body) = &block.finally_body {
+                            nested.push((format!("{}/Finally", source), finally_body.to_vec()));
+                        }
+                    }
+                    _ => {}
+                }
+                instructions.push(debug);
+                if matches!(action, swf::avm1::types::Action::End) {
+                    break;
+                }
+            }
+            Err(_) => {
+                *parse_errors += 1;
+                break;
+            }
+        }
+    }
+
+    let relevant = [
+        "onmousedown", "onmousemove", "onmouseup", "onpress",
+        "onrelease", "onreleaseoutside", "onrollover", "onrollout",
+        "onenterframe", "_xmouse", "_ymouse", "mouselistener",
+        "addlistener", "removelistener", "operatecannon", "calcpower",
+        "calclaunch", "handlecollisions", "checkterraincollisions",
+        "moveraft", "attachmovie", "removemovieclip",
+    ];
+
+    for (index, instruction) in instructions.iter().enumerate() {
+        let lower = instruction.to_ascii_lowercase();
+        if lower.starts_with("constantpool")
+            && relevant.iter().any(|term| lower.contains(term))
+        {
+            report.push(format!("SOURCE: {}", source));
+            report.push(format!("MATCH: instruction {} contains relevant ConstantPool data", index));
+            let start = index.saturating_sub(5);
+            let end = (index + 6).min(instructions.len());
+            for context_index in start..end {
+                report.push(format!("  [{}] {}", context_index, instructions[context_index]));
+            }
+            report.push(String::new());
+        }
+    }
+
+    for (nested_source, nested_data) in nested {
+        trace_action_context(&nested_data, &nested_source, report, parse_errors);
+    }
+}
+
+fn trace_tag_action_context(
+    tags: &[swf::Tag<'_>],
+    source: &str,
+    report: &mut Vec<String>,
+    parse_errors: &mut usize,
+) {
+    for (index, tag) in tags.iter().enumerate() {
+        match tag {
+            swf::Tag::DoAction(actions) => {
+                trace_action_context(actions, &format!("{}/DoAction#{}", source, index), report, parse_errors);
+            }
+            swf::Tag::DoInitAction { action_data, .. } => {
+                trace_action_context(action_data, &format!("{}/DoInitAction#{}", source, index), report, parse_errors);
+            }
+            swf::Tag::PlaceObject(place) => {
+                if let Some(clip_actions) = &place.clip_actions {
+                    for (handler_index, handler) in clip_actions.records.iter().enumerate() {
+                        trace_action_context(
+                            handler.action_data,
+                            &format!("{}/PlaceObject#{}/ClipAction#{}", source, index, handler_index),
+                            report,
+                            parse_errors,
+                        );
+                    }
+                }
+            }
+            swf::Tag::DefineButton(button) | swf::Tag::DefineButton2(button) => {
+                for (handler_index, handler) in button.actions.iter().enumerate() {
+                    trace_action_context(
+                        handler.action_data,
+                        &format!("{}/Button#{}/Action#{}", source, index, handler_index),
+                        report,
+                        parse_errors,
+                    );
+                }
+            }
+            swf::Tag::DefineSprite(sprite) => {
+                trace_tag_action_context(
+                    &sprite.tags,
+                    &format!("{}/Sprite#{}", source, index),
+                    report,
+                    parse_errors,
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
 const SWF_PATH: &str = "/ruffle3ds/raftwars.swf";
 
 #[derive(Default)]
@@ -430,14 +557,26 @@ fn main() {
                                 Err(error) => println!("Interaction report saved: FAIL ({})", error),
                             }
 
-                            let mut trace_report = String::from("Ruffle3DS AVM1 Relevant Action Trace\\n");
-                            trace_report.push_str(&format!("Matching decoded instructions: {}\\n\\n", action_trace.len()));
-                            for line in &action_trace {
-                                trace_report.push_str(&format!("{}\\n", line));
+                            let mut context_trace = Vec::new();
+                            let mut context_parse_errors = 0;
+                            trace_tag_action_context(
+                                &movie.tags,
+                                "Root",
+                                &mut context_trace,
+                                &mut context_parse_errors,
+                            );
+                            let mut trace_report = String::from("Ruffle3DS AVM1 Instruction Context Report\n");
+                            trace_report.push_str("This report shows decoded instruction windows around relevant ConstantPool instructions.\n");
+                            trace_report.push_str("It is static analysis, not runtime execution or proof of assignment/call behavior.\n");
+                            trace_report.push_str(&format!("Context windows: {}\\n", context_trace.iter().filter(|line| line.starts_with("MATCH:")).count()));
+                            trace_report.push_str(&format!("Nested parse errors: {}\\n\\n", context_parse_errors));
+                            for line in &context_trace {
+                                trace_report.push_str(line);
+                                trace_report.push('\\n');
                             }
-                            match std::fs::write("/ruffle3ds/action-trace.txt", trace_report) {
-                                Ok(()) => println!("Action trace saved: PASS"),
-                                Err(error) => println!("Action trace saved: FAIL ({})", error),
+                            match std::fs::write("/ruffle3ds/action-context-report.txt", trace_report) {
+                                Ok(()) => println!("Action context report saved: PASS"),
+                                Err(error) => println!("Action context report saved: FAIL ({})", error),
                             }
 
                             let mut report = String::new();
