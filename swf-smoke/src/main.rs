@@ -230,15 +230,6 @@ fn trace_action_context(
     let mut nested: Vec<(String, Vec<u8>, Vec<String>)> = Vec::new();
     let mut constant_pool: Vec<String> = inherited_constant_pool.to_vec();
 
-    let relevant = [
-        "onmousedown", "onmousemove", "onmouseup", "onpress",
-        "onrelease", "onreleaseoutside", "onrollover", "onrollout",
-        "onenterframe", "_xmouse", "_ymouse", "mouselistener",
-        "addlistener", "removelistener", "operatecannon", "calcpower",
-        "calclaunch", "handlecollisions", "checkterraincollisions",
-        "moveraft", "attachmovie", "removemovieclip",
-    ];
-
     while !reader.get_ref().is_empty() {
         match reader.read_action() {
             Ok(action) => {
@@ -391,6 +382,7 @@ fn trace_tag_action_context(
                         report,
                         parse_errors,
                         &[],
+                        diagnostics,
                     );
                 }
             }
