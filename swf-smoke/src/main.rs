@@ -190,12 +190,13 @@ fn trace_action_context(
     source: &str,
     report: &mut Vec<String>,
     parse_errors: &mut usize,
+    inherited_constant_pool: &[String],
 ) {
     let mut reader = swf::avm1::read::Reader::new(data);
     let mut instructions: Vec<String> = Vec::new();
     let mut matches: Vec<(usize, String)> = Vec::new();
-    let mut nested: Vec<(String, Vec<u8>)> = Vec::new();
-    let mut constant_pool: Vec<String> = Vec::new();
+    let mut nested: Vec<(String, Vec<u8>, Vec<String>)> = Vec::new();
+    let mut constant_pool: Vec<String> = inherited_constant_pool.to_vec();
 
     let relevant = [
         "onmousedown", "onmousemove", "onmouseup", "onpress",
@@ -243,23 +244,23 @@ fn trace_action_context(
                     swf::avm1::types::Action::DefineFunction(function) => {
                         let name = function.name.to_string_lossy(swf::UTF_8);
                         let label = if name.is_empty() { "<anonymous>" } else { &name };
-                        nested.push((format!("{}/Function({})", source, label), function.actions.to_vec()));
+                        nested.push((format!("{}/Function({})", source, label), function.actions.to_vec(), constant_pool.clone()));
                     }
                     swf::avm1::types::Action::DefineFunction2(function) => {
                         let name = function.name.to_string_lossy(swf::UTF_8);
                         let label = if name.is_empty() { "<anonymous>" } else { &name };
-                        nested.push((format!("{}/Function2({})", source, label), function.actions.to_vec()));
+                        nested.push((format!("{}/Function2({})", source, label), function.actions.to_vec(), constant_pool.clone()));
                     }
                     swf::avm1::types::Action::With(block) => {
-                        nested.push((format!("{}/With", source), block.actions.to_vec()));
+                        nested.push((format!("{}/With", source), block.actions.to_vec(), constant_pool.clone()));
                     }
                     swf::avm1::types::Action::Try(block) => {
-                        nested.push((format!("{}/Try", source), block.try_body.to_vec()));
+                        nested.push((format!("{}/Try", source), block.try_body.to_vec(), constant_pool.clone()));
                         if let Some((_, catch_body)) = &block.catch_body {
-                            nested.push((format!("{}/Catch", source), catch_body.to_vec()));
+                            nested.push((format!("{}/Catch", source), catch_body.to_vec(), constant_pool.clone()));
                         }
                         if let Some(finally_body) = &block.finally_body {
-                            nested.push((format!("{}/Finally", source), finally_body.to_vec()));
+                            nested.push((format!("{}/Finally", source), finally_body.to_vec(), constant_pool.clone()));
                         }
                     }
                     _ => {}
@@ -295,8 +296,8 @@ fn trace_action_context(
         report.push(String::new());
     }
 
-    for (nested_source, nested_data) in nested {
-        trace_action_context(&nested_data, &nested_source, report, parse_errors);
+    for (nested_source, nested_data, nested_pool) in nested {
+        trace_action_context(&nested_data, &nested_source, report, parse_errors, &nested_pool);
     }
 }
 
@@ -602,6 +603,7 @@ fn main() {
                                 "Root",
                                 &mut context_trace,
                                 &mut context_parse_errors,
+                                &[],
                             );
                             let mut trace_report = String::from("Ruffle3DS AVM1 Instruction Context Report\n");
                             trace_report.push_str("This report shows decoded instruction windows around relevant strings actually pushed by AVM1 code.\n");
