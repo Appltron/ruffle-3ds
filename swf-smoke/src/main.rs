@@ -310,10 +310,10 @@ fn trace_tag_action_context(
     for (index, tag) in tags.iter().enumerate() {
         match tag {
             swf::Tag::DoAction(actions) => {
-                trace_action_context(actions, &format!("{}/DoAction#{}", source, index), report, parse_errors);
+                trace_action_context(actions, &format!("{}/DoAction#{}", source, index), report, parse_errors, &[]);
             }
             swf::Tag::DoInitAction { action_data, .. } => {
-                trace_action_context(action_data, &format!("{}/DoInitAction#{}", source, index), report, parse_errors);
+                trace_action_context(action_data, &format!("{}/DoInitAction#{}", source, index), report, parse_errors, &[]);
             }
             swf::Tag::PlaceObject(place) => {
                 if let Some(clip_actions) = &place.clip_actions {
@@ -323,6 +323,7 @@ fn trace_tag_action_context(
                             &format!("{}/PlaceObject#{}/ClipAction#{}", source, index, handler_index),
                             report,
                             parse_errors,
+                            &[],
                         );
                     }
                 }
@@ -334,6 +335,7 @@ fn trace_tag_action_context(
                         &format!("{}/Button#{}/Action#{}", source, index, handler_index),
                         report,
                         parse_errors,
+                        &[],
                     );
                 }
             }
@@ -603,7 +605,6 @@ fn main() {
                                 "Root",
                                 &mut context_trace,
                                 &mut context_parse_errors,
-                                &[],
                             );
                             let mut trace_report = String::from("Ruffle3DS AVM1 Instruction Context Report\n");
                             trace_report.push_str("This report shows decoded instruction windows around relevant strings actually pushed by AVM1 code.\n");
