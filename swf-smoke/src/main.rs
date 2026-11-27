@@ -185,13 +185,45 @@ fn count_tag_actions(
 }
 
 
+#[derive(Default)]
+struct TraceDiagnostics {
+    action_blocks: usize,
+    instructions: usize,
+    push_instructions: usize,
+    push_values: usize,
+    direct_strings: usize,
+    constant_pool_references: usize,
+    resolved_constant_pool_references: usize,
+    unresolved_constant_pool_references: usize,
+    relevant_direct_strings: usize,
+    relevant_resolved_strings: usize,
+    nested_functions: usize,
+    nested_blocks: usize,
+}
+
+fn is_relevant_context_string(value: &str) -> bool {
+    let lower = value.to_ascii_lowercase();
+    [
+        "onmousedown", "onmousemove", "onmouseup", "onpress",
+        "onrelease", "onreleaseoutside", "onrollover", "onrollout",
+        "onenterframe", "_xmouse", "_ymouse", "mouselistener",
+        "addlistener", "removelistener", "operatecannon", "calcpower",
+        "calclaunch", "handlecollisions", "checkterraincollisions",
+        "moveraft", "attachmovie", "removemovieclip",
+    ]
+    .iter()
+    .any(|term| lower.contains(term))
+}
+
 fn trace_action_context(
     data: &[u8],
     source: &str,
     report: &mut Vec<String>,
     parse_errors: &mut usize,
     inherited_constant_pool: &[String],
+    diagnostics: &mut TraceDiagnostics,
 ) {
+    diagnostics.action_blocks += 1;
     let mut reader = swf::avm1::read::Reader::new(data);
     let mut instructions: Vec<String> = Vec::new();
     let mut matches: Vec<(usize, String)> = Vec::new();
@@ -210,6 +242,7 @@ fn trace_action_context(
     while !reader.get_ref().is_empty() {
         match reader.read_action() {
             Ok(action) => {
+                diagnostics.instructions += 1;
                 let index = instructions.len();
                 let mut description = format!("{:?}", action);
                 let mut pushed_strings = Vec::new();
@@ -221,15 +254,28 @@ fn trace_action_context(
                             .collect();
                     }
                     swf::avm1::types::Action::Push(values) => {
+                        diagnostics.push_instructions += 1;
                         for value in values.clone() {
+                            diagnostics.push_values += 1;
                             match value {
                                 Ok(swf::avm1::types::Value::Str(value)) => {
-                                    pushed_strings.push(value.to_string_lossy(swf::UTF_8));
+                                    diagnostics.direct_strings += 1;
+                                    let text = value.to_string_lossy(swf::UTF_8);
+                                    if is_relevant_context_string(&text) {
+                                        diagnostics.relevant_direct_strings += 1;
+                                    }
+                                    pushed_strings.push(text);
                                 }
                                 Ok(swf::avm1::types::Value::ConstantPool(pool_index)) => {
+                                    diagnostics.constant_pool_references += 1;
                                     if let Some(value) = constant_pool.get(pool_index as usize) {
+                                        diagnostics.resolved_constant_pool_references += 1;
+                                        if is_relevant_context_string(value) {
+                                            diagnostics.relevant_resolved_strings += 1;
+                                        }
                                         pushed_strings.push(value.clone());
                                     } else {
+                                        diagnostics.unresolved_constant_pool_references += 1;
                                         pushed_strings.push(format!("<constant:{} out of range>", pool_index));
                                     }
                                 }
@@ -242,19 +288,25 @@ fn trace_action_context(
                         }
                     }
                     swf::avm1::types::Action::DefineFunction(function) => {
+                        diagnostics.nested_functions += 1;
+                        diagnostics.nested_blocks += 1;
                         let name = function.name.to_string_lossy(swf::UTF_8);
                         let label = if name.is_empty() { "<anonymous>" } else { &name };
                         nested.push((format!("{}/Function({})", source, label), function.actions.to_vec(), constant_pool.clone()));
                     }
                     swf::avm1::types::Action::DefineFunction2(function) => {
+                        diagnostics.nested_functions += 1;
+                        diagnostics.nested_blocks += 1;
                         let name = function.name.to_string_lossy(swf::UTF_8);
                         let label = if name.is_empty() { "<anonymous>" } else { &name };
                         nested.push((format!("{}/Function2({})", source, label), function.actions.to_vec(), constant_pool.clone()));
                     }
                     swf::avm1::types::Action::With(block) => {
+                        diagnostics.nested_blocks += 1;
                         nested.push((format!("{}/With", source), block.actions.to_vec(), constant_pool.clone()));
                     }
                     swf::avm1::types::Action::Try(block) => {
+                        diagnostics.nested_blocks += 1;
                         nested.push((format!("{}/Try", source), block.try_body.to_vec(), constant_pool.clone()));
                         if let Some((_, catch_body)) = &block.catch_body {
                             nested.push((format!("{}/Catch", source), catch_body.to_vec(), constant_pool.clone()));
@@ -267,8 +319,7 @@ fn trace_action_context(
                 }
 
                 for value in &pushed_strings {
-                    let lower = value.to_ascii_lowercase();
-                    if relevant.iter().any(|term| lower.contains(term)) {
+                    if is_relevant_context_string(value) {
                         matches.push((index, value.clone()));
                     }
                 }
@@ -297,7 +348,9 @@ fn trace_action_context(
     }
 
     for (nested_source, nested_data, nested_pool) in nested {
-        trace_action_context(&nested_data, &nested_source, report, parse_errors, &nested_pool);
+        trace_action_context(
+            &nested_data, &nested_source, report, parse_errors, &nested_pool, diagnostics,
+        );
     }
 }
 
@@ -306,14 +359,15 @@ fn trace_tag_action_context(
     source: &str,
     report: &mut Vec<String>,
     parse_errors: &mut usize,
+    diagnostics: &mut TraceDiagnostics,
 ) {
     for (index, tag) in tags.iter().enumerate() {
         match tag {
             swf::Tag::DoAction(actions) => {
-                trace_action_context(actions, &format!("{}/DoAction#{}", source, index), report, parse_errors, &[]);
+                trace_action_context(actions, &format!("{}/DoAction#{}", source, index), report, parse_errors, &[], diagnostics);
             }
             swf::Tag::DoInitAction { action_data, .. } => {
-                trace_action_context(action_data, &format!("{}/DoInitAction#{}", source, index), report, parse_errors, &[]);
+                trace_action_context(action_data, &format!("{}/DoInitAction#{}", source, index), report, parse_errors, &[], diagnostics);
             }
             swf::Tag::PlaceObject(place) => {
                 if let Some(clip_actions) = &place.clip_actions {
@@ -324,6 +378,7 @@ fn trace_tag_action_context(
                             report,
                             parse_errors,
                             &[],
+                            diagnostics,
                         );
                     }
                 }
@@ -345,6 +400,7 @@ fn trace_tag_action_context(
                     &format!("{}/Sprite#{}", source, index),
                     report,
                     parse_errors,
+                    diagnostics,
                 );
             }
             _ => {}
@@ -600,11 +656,13 @@ fn main() {
 
                             let mut context_trace = Vec::new();
                             let mut context_parse_errors = 0;
+                            let mut trace_diagnostics = TraceDiagnostics::default();
                             trace_tag_action_context(
                                 &movie.tags,
                                 "Root",
                                 &mut context_trace,
                                 &mut context_parse_errors,
+                                &mut trace_diagnostics,
                             );
                             let mut trace_report = String::from("Ruffle3DS AVM1 Instruction Context Report\n");
                             trace_report.push_str("This report shows decoded instruction windows around relevant strings actually pushed by AVM1 code.\n");
