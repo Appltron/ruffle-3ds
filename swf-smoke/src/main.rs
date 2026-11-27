@@ -195,6 +195,7 @@ struct TraceDiagnostics {
     constant_pool_declarations: usize,
     constant_pool_entries: usize,
     relevant_constant_pool_entries: usize,
+    relevant_constant_pool_samples: Vec<String>,
     constant_pool_references: usize,
     resolved_constant_pool_references: usize,
     unresolved_constant_pool_references: usize,
@@ -245,10 +246,14 @@ fn trace_action_context(
                     swf::avm1::types::Action::ConstantPool(pool) => {
                         diagnostics.constant_pool_declarations += 1;
                         diagnostics.constant_pool_entries += pool.strings.len();
-                        for value in &pool.strings {
+                        for (pool_index, value) in pool.strings.iter().enumerate() {
                             let text = value.to_string_lossy(swf::UTF_8);
                             if is_relevant_context_string(&text) {
                                 diagnostics.relevant_constant_pool_entries += 1;
+                                diagnostics.relevant_constant_pool_samples.push(format!(
+                                    "{} | pool[{}] = {:?}",
+                                    source, pool_index, text
+                                ));
                             }
                         }
                         constant_pool = pool.strings.iter()
@@ -681,6 +686,10 @@ fn main() {
                             trace_report.push_str(&format!("Constant-pool declarations: {}\n", trace_diagnostics.constant_pool_declarations));
                             trace_report.push_str(&format!("Constant-pool entries: {}\n", trace_diagnostics.constant_pool_entries));
                             trace_report.push_str(&format!("Relevant constant-pool entries: {}\n", trace_diagnostics.relevant_constant_pool_entries));
+                            trace_report.push_str("Relevant constant-pool entry locations and values:\n");
+                            for sample in &trace_diagnostics.relevant_constant_pool_samples {
+                                trace_report.push_str(&format!("  {}\n", sample));
+                            }
                             trace_report.push_str(&format!("Constant-pool references: {}\n", trace_diagnostics.constant_pool_references));
                             trace_report.push_str(&format!("Resolved constant-pool references: {}\n", trace_diagnostics.resolved_constant_pool_references));
                             trace_report.push_str(&format!("Unresolved constant-pool references: {}\n", trace_diagnostics.unresolved_constant_pool_references));
