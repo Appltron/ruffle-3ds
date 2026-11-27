@@ -661,7 +661,19 @@ fn main() {
                             trace_report.push_str("Constant-pool entries are reported only when referenced by a Push instruction.\n");
                             trace_report.push_str("This is static analysis, not runtime execution or complete stack/data-flow proof.\n");
                                                         trace_report.push_str(&format!("Context windows: {}\n", context_trace.iter().filter(|line| line.starts_with("MATCH:")).count()));
-                                                        trace_report.push_str(&format!("Nested parse errors: {}\n\n", context_parse_errors));
+                                                        trace_report.push_str(&format!("Nested parse errors: {}\n", context_parse_errors));
+                            trace_report.push_str(&format!("Action blocks visited: {}\n", trace_diagnostics.action_blocks));
+                            trace_report.push_str(&format!("Instructions decoded by tracer: {}\n", trace_diagnostics.instructions));
+                            trace_report.push_str(&format!("Push instructions: {}\n", trace_diagnostics.push_instructions));
+                            trace_report.push_str(&format!("Push values: {}\n", trace_diagnostics.push_values));
+                            trace_report.push_str(&format!("Direct strings: {}\n", trace_diagnostics.direct_strings));
+                            trace_report.push_str(&format!("Constant-pool references: {}\n", trace_diagnostics.constant_pool_references));
+                            trace_report.push_str(&format!("Resolved constant-pool references: {}\n", trace_diagnostics.resolved_constant_pool_references));
+                            trace_report.push_str(&format!("Unresolved constant-pool references: {}\n", trace_diagnostics.unresolved_constant_pool_references));
+                            trace_report.push_str(&format!("Relevant direct strings: {}\n", trace_diagnostics.relevant_direct_strings));
+                            trace_report.push_str(&format!("Relevant resolved strings: {}\n", trace_diagnostics.relevant_resolved_strings));
+                            trace_report.push_str(&format!("Nested functions: {}\n", trace_diagnostics.nested_functions));
+                            trace_report.push_str(&format!("Nested blocks: {}\n\n", trace_diagnostics.nested_blocks));
                             for line in &context_trace {
                                 trace_report.push_str(line);
                                 trace_report.push('\n');
