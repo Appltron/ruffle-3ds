@@ -192,7 +192,7 @@ struct TraceDiagnostics {
     push_instructions: usize,
     push_values: usize,
     push_value_type_counts: BTreeMap<String, usize>,
-    main_script_push_samples: Vec<String>,
+    main_script_readable_push_samples: Vec<String>,
     direct_strings: usize,
     constant_pool_declarations: usize,
     constant_pool_entries: usize,
@@ -280,13 +280,19 @@ fn trace_action_context(
                                 Err(_) => "ParseError",
                             };
                             *diagnostics.push_value_type_counts.entry(value_type.to_string()).or_insert(0) += 1;
-                            if source == "Root/DoAction#1699" && diagnostics.main_script_push_samples.len() < 100 {
-                                diagnostics.main_script_push_samples.push(format!("instruction {}: {:?}", index, value));
-                            }
                             match value {
                                 Ok(swf::avm1::types::Value::Str(value)) => {
                                     diagnostics.direct_strings += 1;
                                     let text = value.to_string_lossy(swf::UTF_8);
+                                    if source == "Root/DoAction#1699"
+                                        && is_readable_script_string(&text)
+                                        && diagnostics.main_script_readable_push_samples.len() < 100
+                                    {
+                                        diagnostics.main_script_readable_push_samples.push(format!(
+                                            "instruction {}: {:?}",
+                                            index, text
+                                        ));
+                                    }
                                     if is_relevant_context_string(&text) {
                                         diagnostics.relevant_direct_strings += 1;
                                     }
@@ -693,7 +699,7 @@ fn main() {
                             );
                             let mut trace_report = String::from("Ruffle3DS AVM1 Instruction Context Report\n");
                             trace_report.push_str("This report shows decoded instruction windows around relevant strings actually pushed by AVM1 code.\n");
-                            trace_report.push_str("Constant-pool entries are reported only when referenced by a Push instruction.\n");
+                            trace_report.push_str("Constant-pool declarations are inventoried separately; references are counted only when a Push value uses a pool index.\n");
                             trace_report.push_str("This is static analysis, not runtime execution or complete stack/data-flow proof.\n");
                                                         trace_report.push_str(&format!("Context windows: {}\n", context_trace.iter().filter(|line| line.starts_with("MATCH:")).count()));
                                                         trace_report.push_str(&format!("Nested parse errors: {}\n", context_parse_errors));
@@ -705,8 +711,8 @@ fn main() {
                             for (value_type, count) in &trace_diagnostics.push_value_type_counts {
                                 trace_report.push_str(&format!("  {}: {}\n", value_type, count));
                             }
-                            trace_report.push_str("Main gameplay script Push samples (first 100):\n");
-                            for sample in &trace_diagnostics.main_script_push_samples {
+                            trace_report.push_str("Main gameplay script readable direct Push strings (first 100):\n");
+                            for sample in &trace_diagnostics.main_script_readable_push_samples {
                                 trace_report.push_str(&format!("  {}\n", sample));
                             }
                             trace_report.push_str(&format!("Direct strings: {}\n", trace_diagnostics.direct_strings));
