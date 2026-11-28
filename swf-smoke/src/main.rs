@@ -191,6 +191,8 @@ struct TraceDiagnostics {
     instructions: usize,
     push_instructions: usize,
     push_values: usize,
+    push_value_type_counts: BTreeMap<String, usize>,
+    main_script_push_samples: Vec<String>,
     direct_strings: usize,
     constant_pool_declarations: usize,
     constant_pool_entries: usize,
@@ -264,6 +266,23 @@ fn trace_action_context(
                         diagnostics.push_instructions += 1;
                         for value in values.clone() {
                             diagnostics.push_values += 1;
+                            let value_type = match &value {
+                                Ok(swf::avm1::types::Value::Str(_)) => "String",
+                                Ok(swf::avm1::types::Value::Float(_)) => "Float",
+                                Ok(swf::avm1::types::Value::Null) => "Null",
+                                Ok(swf::avm1::types::Value::Undefined) => "Undefined",
+                                Ok(swf::avm1::types::Value::Register(_)) => "Register",
+                                Ok(swf::avm1::types::Value::Bool(_)) => "Bool",
+                                Ok(swf::avm1::types::Value::Double(_)) => "Double",
+                                Ok(swf::avm1::types::Value::Int(_)) => "Int",
+                                Ok(swf::avm1::types::Value::ConstantPool(_)) => "ConstantPool",
+                                Ok(swf::avm1::types::Value::Invalid { .. }) => "Invalid",
+                                Err(_) => "ParseError",
+                            };
+                            *diagnostics.push_value_type_counts.entry(value_type.to_string()).or_insert(0) += 1;
+                            if source == "Root/DoAction#1699" && diagnostics.main_script_push_samples.len() < 100 {
+                                diagnostics.main_script_push_samples.push(format!("instruction {}: {:?}", index, value));
+                            }
                             match value {
                                 Ok(swf::avm1::types::Value::Str(value)) => {
                                     diagnostics.direct_strings += 1;
@@ -682,6 +701,14 @@ fn main() {
                             trace_report.push_str(&format!("Instructions decoded by tracer: {}\n", trace_diagnostics.instructions));
                             trace_report.push_str(&format!("Push instructions: {}\n", trace_diagnostics.push_instructions));
                             trace_report.push_str(&format!("Push values: {}\n", trace_diagnostics.push_values));
+                            trace_report.push_str("Push value type counts:\n");
+                            for (value_type, count) in &trace_diagnostics.push_value_type_counts {
+                                trace_report.push_str(&format!("  {}: {}\n", value_type, count));
+                            }
+                            trace_report.push_str("Main gameplay script Push samples (first 100):\n");
+                            for sample in &trace_diagnostics.main_script_push_samples {
+                                trace_report.push_str(&format!("  {}\n", sample));
+                            }
                             trace_report.push_str(&format!("Direct strings: {}\n", trace_diagnostics.direct_strings));
                             trace_report.push_str(&format!("Constant-pool declarations: {}\n", trace_diagnostics.constant_pool_declarations));
                             trace_report.push_str(&format!("Constant-pool entries: {}\n", trace_diagnostics.constant_pool_entries));
